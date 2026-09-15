@@ -1,0 +1,23 @@
+# Ambientes Python
+.venv/
+.venv-1/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Dataset: NUNCA deve ser versionado no repositório.
+# Todo o dataset (bruto, processado, intermediário, cache, metadados) vive em
+# /Volumes/BinEXT/datasets/anp_combustiveis/ e não deve ser copiado para o projeto.
+data/
+datasets/
+*.parquet
+*.xlsx
+*.xlsb
+*.xls
+
+# Sistema
+.DS_Store
+
+# Resultados grandes (mantemos apenas CSVs pequenos e figuras em results/)
+results/models/*.keras
+results/models/*.h5

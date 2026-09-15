@@ -1,0 +1,14 @@
+{
+  "best_value_mae_val": 0.3892982006072998,
+  "best_params": {
+    "units": 96,
+    "n_layers": 1,
+    "dropout": 0.03706118044100799,
+    "learning_rate": 0.0006726887229962237,
+    "batch_size": 32
+  },
+  "best_trial_number": 11,
+  "n_trials": 20,
+  "cell_type": "LSTM",
+  "window_size": 12
+}
