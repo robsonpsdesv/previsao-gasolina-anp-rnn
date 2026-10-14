@@ -43,7 +43,8 @@ def to_log_return_frame(df: pd.DataFrame) -> pd.DataFrame:
     return out.iloc[1:]  # a 1ª linha não tem diferença
 
 
-def prepare_window_data(window_size: int, horizon: int = config.HORIZON, target_mode: str = "level"):
+def prepare_window_data(window_size: int, horizon: int = config.HORIZON, target_mode: str = "level",
+                        split_fracs: tuple[float, float] = (config.TRAIN_FRAC, config.VAL_FRAC)):
     """Retorna sequências de treino/validação/teste e os scalers ajustados no treino.
 
     target_mode="level": alvo = preço em t+1 (padronizado).
@@ -55,7 +56,7 @@ def prepare_window_data(window_size: int, horizon: int = config.HORIZON, target_
         df = to_log_return_frame(df)
     elif target_mode != "level":
         raise ValueError(f"target_mode inválido: {target_mode}")
-    train_df, val_df, test_df = chronological_split(df)
+    train_df, val_df, test_df = chronological_split(df, *split_fracs)
 
     feature_scaler, target_scaler = fit_scalers(train_df)
     X_all, y_all = apply_scalers(df, feature_scaler, target_scaler)
@@ -95,11 +96,12 @@ def train_experiment(
     seed: int = config.SEED,
     verbose: int = 0,
     target_mode: str = "level",
+    split_fracs: tuple[float, float] = (config.TRAIN_FRAC, config.VAL_FRAC),
 ):
     """Treina uma configuração e retorna métricas, histórico, tempo e o modelo treinado."""
     set_seeds(seed)
 
-    prepared = prepare_window_data(window_size, target_mode=target_mode)
+    prepared = prepare_window_data(window_size, target_mode=target_mode, split_fracs=split_fracs)
     splits, feature_scaler, target_scaler = prepared[:3]
     X_train, y_train, dates_train = splits["train"]
     X_val, y_val, dates_val = splits["val"]

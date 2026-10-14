@@ -14,6 +14,19 @@ multivariada de preços de combustíveis da ANP. Comparação controlada entre
 **SimpleRNN, GRU e LSTM**, variando janela temporal, unidades, profundidade e
 regularização, com busca de hiperparâmetros via Optuna.
 
+## Resumo dos resultados em duas etapas
+
+Os resultados estão organizados em duas etapas, com a comparação final contra a persistência
+(split 60/20/20, métricas em R$/L):
+
+| Etapa | Principal resultado | Interpretação |
+|---|---|---|
+| **Etapa 1** — Previsão em nível de preço (seções 4 a 11) | GRU, MAE validação 0,446 | Melhor recorrente nessa formulação, mas generalização insatisfatória (MAE teste 1,317; R² teste -5,306) |
+| **Etapa 2** — Previsão com log-retornos (seção 12) | SimpleRNN, MAE validação 0,0313 | Forte melhora com representação transformada (MAE teste 0,0400; R² teste 0,9806) |
+| **Comparação final com persistência** (seções 13 e 14) | MAE teste de 0,0391 | Melhor MAE de teste entre as referências destacadas; as redes da Etapa 2 apenas se aproximam (diferença de ~0,001 R$/L, execução única) |
+
+A seção 13 repete a análise em outros splits cronológicos para ambas as etapas.
+
 ## 2. Fonte e caracterização do dataset
 
 - **Fonte**: ANP — Série Histórica do Levantamento de Preços, agregado semanal nacional
@@ -72,7 +85,7 @@ regularização, com busca de hiperparâmetros via Optuna.
   [`results/optuna_trials.csv`](../results/optuna_trials.csv) e
   [`results/optuna_best_params.json`](../results/optuna_best_params.json).
 
-## 4. Resultados de validação e seleção dos modelos promissores
+## 4. Etapa 1 — Resultados de validação em nível de preço e seleção dos modelos promissores
 
 Tabela completa em [`results/experiments.csv`](../results/experiments.csv). Baseline
 de persistência (referência):
@@ -247,7 +260,7 @@ semanas e 3,1 s com 26 semanas).
   de preço entre as próprias features — um resultado consistente com a literatura de
   séries financeiras.
 
-## 11. Conclusão
+## 11. Conclusão da Etapa 1 (previsão em nível de preço)
 
 A arquitetura GRU apresentou o melhor desempenho relativo entre as redes recorrentes
 avaliadas, obtendo os menores valores de MAE de validação nas três janelas temporais
@@ -276,7 +289,7 @@ dados, erro de implementação ou métricas fabricadas. Todos os números deste 
 foram extraídos de `results/experiments.csv`, `results/optuna_trials.csv` e do log da
 execução de `python -m src.run_experiments`.
 
-## 12. Reformulação com log-retornos (tratamento da não estacionariedade)
+## 12. Etapa 2 — Reformulação com log-retornos (tratamento da não estacionariedade)
 
 Como a causa da degradação no teste é a mudança de patamar de preços (seção 6), o
 problema foi reformulado: features e alvo passaram a ser **log-retornos semanais**
@@ -310,3 +323,121 @@ Código em `src/run_experiments_delta.py`; resultados em
   ficou na frente da GRU e da LSTM (e foi escolhida pelo Optuna), de modo que a
   superioridade da GRU observada na seção 4 está associada ao regime de extrapolação em
   nível, e não a uma vantagem geral da arquitetura.
+
+## 13. Sensibilidade ao split cronológico (Etapas 1 e 2; 70/15/15, 75/15/10, 80/10/10)
+
+Para verificar se o problema de generalização depende da divisão temporal, foram
+repetidos os experimentos com três splits adicionais, comparados ao 60/20/20 original.
+Em cada split: 3 arquiteturas × 3 janelas (64 unidades, 1 camada, dropout 0,2, seed 42),
+nos dois alvos (preço em nível e log-retorno, seção 12), mais a persistência calculada
+nas mesmas amostras de validação/teste. Todas as métricas em R$/L. Código em
+`src/run_experiments_splits.py`; resultados completos em
+[`results/experiments_splits.csv`](../results/experiments_splits.csv).
+
+**Cobertura de preços do treino em cada split** (validação e teste são sempre posteriores):
+
+| Split | Treino até | Sem. treino/val/teste | Preço máx. treino | Preço mín.–máx. teste |
+|---|---|---:|---:|---:|
+| 60/20/20 | 2017-09-03 | 691 / 230 / 231 | 3,85 | 4,79–7,39 |
+| 70/15/15 | 2019-11-17 | 806 / 172 / 174 | 4,73 | 5,21–6,78 |
+| 75/15/10 | 2021-02-21 | 864 / 172 / 116 | 5,17 | 5,85–6,78 |
+| 80/10/10 | 2022-03-27 | 921 / 115 / 116 | 7,27 | 5,85–6,78 |
+
+**Alvo em nível** (melhor configuração por MAE de validação em cada split):
+
+| Split | Melhor config. (val) | MAE val | MAE teste | R² teste | Persistência: MAE teste | Persistência: R² teste |
+|---|---|---:|---:|---:|---:|---:|
+| 60/20/20 | GRU, janela 4 | 0,754 | 1,825 | -10,57 | 0,0391 | 0,9788 |
+| 70/15/15 | LSTM, janela 12 | 0,612 | 0,716 | -3,51 | 0,0256 | 0,9771 |
+| 75/15/10 | LSTM, janela 12 | 0,547 | 0,535 | -6,27 | 0,0196 | 0,9634 |
+| 80/10/10 | LSTM, janela 12 | 0,233 | 0,085 | 0,644 | 0,0196 | 0,9634 |
+
+**Alvo em log-retorno** (melhor configuração por MAE de validação em cada split):
+
+| Split | Melhor config. (val) | MAE val | MAE teste | RMSE teste | R² teste | Persistência: MAE val / MAE teste / RMSE teste |
+|---|---|---:|---:|---:|---:|---|
+| 60/20/20 | SimpleRNN, janela 4 | 0,0323 | 0,0403 | 0,0774 | 0,9810 | 0,0356 / 0,0391 / 0,0818 |
+| 70/15/15 | GRU, janela 26 | 0,0485 | 0,0274 | 0,0523 | 0,9775 | 0,0583 / 0,0256 / 0,0528 |
+| 75/15/10 | GRU, janela 12 | 0,0521 | 0,0228 | 0,0367 | 0,9672 | 0,0565 / 0,0196 / 0,0387 |
+| 80/10/10 | LSTM, janela 4 | 0,0529 | 0,0239 | 0,0366 | 0,9672 | 0,0589 / 0,0196 / 0,0387 |
+
+Observações:
+
+- **Em nível, o erro de teste cai à medida que o treino cobre faixas de preço mais
+  altas**: média das 9 configurações de 2,02 R$/L (60/20/20) para 1,02 (70/15/15),
+  0,86 (75/15/10) e 0,15 (80/10/10). Só no 80/10/10, em que o treino já contém o pico de
+  R$ 7,27 e todo o intervalo de preços do teste, o R² de teste fica positivo (0,64 na
+  melhor configuração; as médias por arquitetura variam de -0,23 a 0,32). Mesmo assim o
+  MAE (0,085 na melhor, 0,15 na média) é 4 a 8 vezes o da persistência (0,0196). Isso
+  corrobora que a falha em nível é de extrapolação, não de capacidade.
+- **Em log-retorno, o erro é estável e baixo em todos os splits** (R² de teste de 0,97 a
+  0,98), e a conclusão da seção 12 se mantém: o **MAE de validação é menor que o da
+  persistência em todos os splits** (por exemplo 0,0529 contra 0,0589 no 80/10/10), o
+  **RMSE de teste é igual ou menor** nas melhores configurações (SimpleRNN/GRU, p. ex.
+  0,0348 contra 0,0387 no 80/10/10), mas o **MAE de teste é sempre pior que o da
+  persistência** (mínimo/média entre as 9 configurações: 0,0400/0,0408 contra 0,0391 no
+  60/20/20; 0,0270/0,0284 contra 0,0256 no 70/15/15; 0,0227/0,0238 contra 0,0196 no
+  75/15/10; 0,0215/0,0231 contra 0,0196 no 80/10/10). Ou seja, as redes
+  reduzem erros grandes (RMSE), mas não superam a persistência nos erros típicos (MAE).
+- **Splits com teste menor são mais sensíveis**: nos splits 75/15/10 e 80/10/10 o teste
+  tem 116 semanas (os dois compartilham o mesmo conjunto de teste, de modo que a
+  persistência é idêntica), e as diferenças entre modelos (≈0,001-0,002 R$/L) são
+  pequenas diante da variabilidade esperada. Os MAE e RMSE absolutos não são comparáveis
+  entre splits, pois os períodos de teste diferem; a comparação válida é sempre contra a
+  persistência no mesmo split.
+- **A melhor arquitetura varia conforme o split e o alvo** (GRU, LSTM e SimpleRNN
+  aparecem como melhores por MAE de validação), com diferenças pequenas e execução única
+  por configuração; não há base para apontar uma arquitetura como superior de forma
+  geral.
+- **Conclusão da seção**: o split mais favorável para o alvo em nível é o 80/10/10, mas
+  isso ocorre por incluir no treino o patamar de preços recente; a reformulação em
+  log-retorno resolve o problema independentemente do split. Em nenhum cenário as redes
+  superaram claramente o baseline de persistência no conjunto de teste.
+
+## 14. Comparação final com a persistência e conclusão geral
+
+Conjunto de teste do split 60/20/20 (2022-04-03 a 2026-08-30), melhor modelo por MAE de
+validação em cada etapa (ambos com busca Optuna) contra o baseline:
+
+| Modelo | MAE val | MAE teste | RMSE teste | R² teste |
+|---|---:|---:|---:|---:|
+| Etapa 1 — GRU em nível (Optuna) | **0,446** | 1,317 | 1,411 | -5,306 |
+| Etapa 2 — SimpleRNN em log-retorno (Optuna) | **0,0313** | 0,0400 | 0,0784 | 0,9806 |
+| Persistência | 0,0356 | **0,0391** | 0,0818 | 0,9788 |
+
+- **Etapa 1**: a GRU foi a melhor rede recorrente na validação, mas a avaliação em teste
+  mostra generalização insatisfatória, causada pela mudança de patamar de preços e não
+  por vazamento ou erro de implementação (seção 6).
+- **Etapa 2**: a representação em log-retorno reduz o MAE de teste em ~97% e leva o R²
+  de teste a ~0,98; a SimpleRNN passou a ser a melhor arquitetura na validação.
+- **Persistência**: tem o **menor MAE de teste** (0,0391) entre as referências
+  destacadas. A rede da Etapa 2 fica a ~0,001 R$/L, com RMSE e R² de teste marginalmente
+  melhores; como cada configuração foi treinada uma vez (seed 42), não há evidência de
+  superioridade de nenhum dos dois. Nos demais splits (seção 13) a persistência também
+  mantém o menor MAE de teste.
+- **Conclusão geral**: o ganho decisivo veio da representação dos dados (log-retornos),
+  não da escolha da arquitetura. Com a representação adequada, as redes recorrentes
+  igualam, mas não superam de forma clara, o baseline de persistência.
+
+## Anexo — Tabelas do dataset no DuckDB (visualização no DBeaver)
+
+Complemento visual das tabelas do banco `datasets/anp.duckdb`, criadas por
+[`datasets/init.sql`](../datasets/init.sql). As capturas mostram as primeiras 200 linhas
+de cada tabela.
+
+**`precos_semanal_raw`** — importação direta das duas planilhas da ANP
+(`semanal-brasil-2004-a-2012.xlsx` e `semanal-brasil-desde-2013.xlsx`), sem remoção de
+duplicatas, com todos os produtos e a coluna `arquivo_origem`.
+
+![Tabela precos_semanal_raw no DBeaver](../results/tables/precos_semanal_raw.png)
+
+**`precos_semanal`** — mesma estrutura, sem as semanas repetidas na fronteira entre os
+dois arquivos, ordenada por `data_inicial` e `produto`.
+
+![Tabela precos_semanal no DBeaver](../results/tables/precos_semanal.png)
+
+**`serie_semanal_nacional`** — série processada usada nos experimentos: as 8 features
+(gasolina, etanol e diesel) e o alvo `target_gasolina_t_plus_1`, uma linha por semana
+(1152 semanas).
+
+![Tabela serie_semanal_nacional no DBeaver](../results/tables/serie_semanal_nacional.png)
