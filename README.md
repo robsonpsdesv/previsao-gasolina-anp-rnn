@@ -48,8 +48,14 @@ O caminho pode ser sobrescrito pela variável de ambiente `ANP_DATA_ROOT`.
   hidratado; preço médio do óleo diesel.
 - **Horizonte**: 1 semana à frente (one-step-ahead).
 - **Janelas testadas**: 4, 12 e 26 semanas.
-- **Split cronológico**: 60% treino / 20% validação / 20% teste, sem embaralhamento.
+- **Split cronológico**: 60% treino / 20% validação / 20% teste (padrão), sem
+  embaralhamento; splits alternativos 70/15/15, 75/15/10 e 80/10/10 também avaliados.
 - **Normalização**: `StandardScaler` ajustado somente no treino.
+- **Duas formulações do alvo**:
+  - **Etapa 1 — nível de preço** (`target_mode="level"`): prevê o preço em `t+1`.
+  - **Etapa 2 — log-retorno** (`target_mode="delta"`): features e alvo em log-retorno
+    semanal; o preço é reconstruído como `y_t · exp(r̂)`.
+  - Em ambas, as métricas (MAE, RMSE, R²) são em R$/L e comparadas à persistência.
 
 ## Estrutura do projeto
 
@@ -73,16 +79,26 @@ projeto-anp/
 │   ├── preprocessing.py    # pivot, alvo, checks, split cronológico, scalers
 │   ├── sequences.py        # create_sequences(X, y, window_size, horizon)
 │   ├── models.py           # SimpleRNN / GRU / LSTM comparáveis
-│   ├── training.py         # preparação por janela + rotina de treino
+│   ├── training.py         # preparação por janela (nível/log-retorno, splits) + treino
 │   ├── evaluation.py       # métricas na escala original + gráficos
-│   ├── run_experiments.py  # grade completa de experimentos + Optuna
+│   ├── run_experiments.py        # Etapa 1: grade completa em nível + Optuna
+│   ├── run_experiments_delta.py  # Etapa 2: grade em log-retorno + Optuna
+│   ├── run_experiments_splits.py # splits 60/20/20, 70/15/15, 75/15/10, 80/10/10
+│   ├── eda.py                    # estatísticas, distribuições e datas das fronteiras
 │   └── utils.py            # seeds e relatório do ambiente
 ├── notebooks/
 │   └── analysis.ipynb
 ├── results/
-│   ├── experiments.csv
+│   ├── experiments.csv             # Etapa 1
 │   ├── optuna_trials.csv
 │   ├── optuna_best_params.json
+│   ├── experiments_delta.csv       # Etapa 2
+│   ├── optuna_delta_trials.csv
+│   ├── optuna_delta_best_params.json
+│   ├── experiments_splits.csv      # sensibilidade ao split
+│   ├── eda_estatisticas_*.csv      # estatísticas descritivas
+│   ├── fronteiras_splits.csv       # datas de entradas/alvos por partição
+│   ├── tables/                     # capturas das tabelas do DuckDB (DBeaver)
 │   ├── figures/
 │   └── models/
 └── report/
@@ -99,21 +115,48 @@ pip install -r requirements.txt
 
 ## Execução
 
+Todos os comandos são executados na raiz do projeto, com o ambiente virtual ativo. Todos
+usam `seed=42`; cada configuração é treinada uma vez.
+
 ```bash
 # 1. Baixa dados (se necessário) e constrói a série processada
 python -m src.preprocessing
 
-# 2. Roda toda a grade de experimentos (baseline, janelas, arquiteturas,
-#    unidades, profundidade, regularização e busca Optuna)
-python -m src.run_experiments
+# 2. Análise exploratória: estatísticas, gráficos de distribuição e datas das
+#    fronteiras dos splits (results/eda_*.csv, fronteiras_splits.csv, figures/eda_*.png)
+python -m src.eda
+
+# 3. Etapa 1 — previsão em nível de preço (split 60/20/20): baseline, janelas,
+#    arquiteturas, unidades, profundidade, regularização e busca Optuna
+python -m src.run_experiments            # -> results/experiments.csv
+
+# 4. Etapa 2 — previsão com log-retornos (split 60/20/20): grade 3 janelas x 3
+#    arquiteturas + Optuna, comparada à persistência
+python -m src.run_experiments_delta      # -> results/experiments_delta.csv
+
+# 5. Sensibilidade ao split (60/20/20, 70/15/15, 75/15/10, 80/10/10), nos dois alvos
+python -m src.run_experiments_splits    # -> results/experiments_splits.csv
 ```
 
-O notebook `notebooks/analysis.ipynb` reproduz o pipeline de forma interativa,
-com as exploração dos dados, gráficos e discussão dos resultados.
+Para usar outro split ou alvo em código próprio:
+
+```python
+from src.training import train_experiment
+result, art = train_experiment("GRU", window_size=12, target_mode="delta",
+                               split_fracs=(0.70, 0.15))  # 70/15/15
+```
+
+Com `target_mode="delta"`, o artefato retornado contém `price_true_{val,test}` e
+`price_pred_{val,test}` (R$/L); em `"level"`, as métricas usam `art["target_scaler"]`
+(ver `src/run_experiments_splits.py`).
+
+O notebook `notebooks/analysis.ipynb` reproduz o pipeline da Etapa 1 de forma
+interativa (exploração dos dados, gráficos e discussão); a Etapa 2 e a sensibilidade ao
+split são executadas pelos scripts acima.
 
 ## Resultados
 
-Ver [report/resultados.md](report/resultados.md) para a tabela de experimentos,
-gráficos e análise crítica (SimpleRNN x GRU x LSTM, efeito da janela temporal,
-custo computacional e escolha das três melhores configurações), com números
-extraídos diretamente de `results/experiments.csv`.
+Ver [report/resultados.md](report/resultados.md): resumo em duas etapas (nível de preço
+e log-retorno), análise exploratória, datas das fronteiras dos splits, tabela de
+experimentos, sensibilidade ao split, comparação final com a persistência e limitações,
+com números extraídos dos CSVs em `results/`.

@@ -45,6 +45,63 @@ A seção 13 repete a análise em outros splits cronológicos para ambas as etap
   comprometem a construção das janelas, pois `create_sequences` opera sobre a ordem
   das observações disponíveis, não sobre datas de calendário.
 
+### Análise exploratória
+
+Estatísticas e gráficos gerados por `python -m src.eda`
+([`results/eda_estatisticas_features.csv`](../results/eda_estatisticas_features.csv),
+[`results/eda_estatisticas_por_split.csv`](../results/eda_estatisticas_por_split.csv) e
+`results/figures/eda_*.png`). A curtose é a curtose em excesso (0 para a normal).
+
+**Features (série completa, 1152 semanas)**
+
+| Feature | Média | Desvio | Mín. | Mediana | Máx. | Assimetria |
+|---|---:|---:|---:|---:|---:|---:|
+| gasolina_preco_medio (R$/L) | 3,83 | 1,44 | 2,08 | 3,30 | 7,39 | 0,73 |
+| gasolina_preco_minimo (R$/L) | 3,17 | 1,19 | 1,39 | 2,75 | 6,29 | 0,75 |
+| gasolina_preco_maximo (R$/L) | 5,11 | 1,95 | 2,85 | 4,52 | 9,79 | 0,81 |
+| gasolina_desvio_padrao (R$/L) | 0,24 | 0,09 | 0,135 | 0,198 | 0,535 | 0,62 |
+| gasolina_coef_variacao | 0,062 | 0,006 | 0,049 | 0,062 | 0,083 | 0,40 |
+| gasolina_num_postos | 7163 | 2776 | 485 | 7229 | 12701 | 0,32 |
+| etanol_preco_medio (R$/L) | 2,59 | 1,07 | 1,20 | 2,20 | 5,54 | 0,69 |
+| diesel_preco_medio (R$/L) | 3,34 | 1,65 | 1,44 | 2,81 | 7,57 | 0,95 |
+
+**Preço da gasolina e log-retorno semanal por split (60/20/20)**
+
+| Split | Média | Desvio | Mín. | Mediana | Máx. | Retorno: média | Retorno: desvio | Retorno: curtose | Retorno: autocorr. lag 1 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Treino | 2,80 | 0,43 | 2,08 | 2,62 | 3,85 | 0,0009 | 0,0072 | 58,6 | 0,14 |
+| Validação | 4,79 | 0,85 | 3,80 | 4,47 | 7,27 | 0,0027 | 0,0116 | 12,1 | 0,48 |
+| Teste | 5,99 | 0,57 | 4,79 | 6,10 | 7,39 | -0,0004 | 0,0137 | 14,7 | 0,47 |
+
+![Série e splits](../results/figures/eda_serie_e_splits.png)
+
+![Distribuição do preço por split](../results/figures/eda_distribuicao_preco_por_split.png)
+
+![Distribuição do log-retorno por split](../results/figures/eda_distribuicao_log_retorno_por_split.png)
+
+![Histogramas das features](../results/figures/eda_histogramas_features.png)
+
+![Autocorrelação do preço e do log-retorno](../results/figures/eda_autocorrelacao.png)
+
+Observações:
+
+- **Deslocamento de nível entre os splits**: as medianas do preço são 2,62, 4,47 e 6,10
+  R$/L (treino, validação, teste), e as distribuições de treino e teste praticamente não
+  se sobrepõem (máximo do treino 3,85; mínimo do teste 4,79).
+- **Log-retorno semanal**: a média é próxima de zero nos três splits, mas o desvio
+  aumenta (0,0072 → 0,0116 → 0,0137) e as caudas são pesadas (curtose em excesso entre
+  12 e 59), com choques como -9,4% na semana de 2022-07-03 e +8,4% em 2022-03-13. Ou
+  seja, a série de retornos tem escala mais estável que o nível, mas não é homogênea.
+- **Autocorrelação**: o preço em nível é altamente persistente (0,997 na defasagem 1 e
+  0,897 na defasagem 26), o que é compatível com a força do baseline de persistência. O
+  log-retorno tem autocorrelação positiva até cerca de 9 semanas (0,375 na defasagem 1
+  na série completa; 0,14, 0,48 e 0,47 por split), indicando alguma dependência de
+  curto prazo que um modelo poderia explorar.
+- **Features de contagem não estacionárias**: `gasolina_num_postos` cresce de 485 a
+  12.701 postos pesquisados ao longo da série, o que sugere mudança na abrangência da
+  pesquisa (observação descritiva; não foi investigada a causa).
+- Todas as features têm assimetria positiva moderada (0,3 a 0,95).
+
 ## 3. Pré-processamento e protocolo experimental
 
 - **Split cronológico** (sem embaralhamento), **60% treino / 20% validação / 20%
@@ -63,6 +120,58 @@ A seção 13 repete a análise em outros splits cronológicos para ambas as etap
   mesmo otimizador (Adam), `EarlyStopping(patience=15, restore_best_weights=True)` +
   `ReduceLROnPlateau`, mesma seed (42) e `shuffle=False` em todos os treinos.
 - **Baseline**: persistência ($\hat{y}_{t+1} = y_t$).
+
+### Datas das entradas e dos alvos nas fronteiras dos conjuntos
+
+Convenção: uma amostra com data-base `t` usa como entrada as `w` observações
+consecutivas disponíveis `t-w+1, ..., t` e tem como alvo o preço da observação seguinte
+(`t+1`, ou seja, a próxima semana disponível — a maior lacuna, em outubro/2020, tem 63
+dias). A amostra é atribuída à partição pela **data-base `t`** (treino: `t` ≤ última
+semana de treino, e assim por diante). Datas exatas, para todos os splits, janelas e
+alvos, em [`results/fronteiras_splits.csv`](../results/fronteiras_splits.csv)
+(gerado por `python -m src.eda`).
+
+Split 60/20/20, alvo em nível:
+
+| Janela | Partição | Amostras | Primeira entrada | Primeira base `t` | Primeiro alvo | Última base `t` | Último alvo |
+|---:|---|---:|---|---|---|---|---|
+| 4 | Treino | 688 | 2004-05-09 | 2004-05-30 | 2004-06-06 | 2017-09-03 | 2017-09-10 |
+| 4 | Validação | 230 | 2017-08-20 | 2017-09-10 | 2017-09-17 | 2022-03-27 | 2022-04-03 |
+| 4 | Teste | 231 | 2022-03-13 | 2022-04-03 | 2022-04-10 | 2026-08-30 | 2026-09-06 |
+| 12 | Treino | 680 | 2004-05-09 | 2004-07-25 | 2004-08-01 | 2017-09-03 | 2017-09-10 |
+| 12 | Validação | 230 | 2017-06-25 | 2017-09-10 | 2017-09-17 | 2022-03-27 | 2022-04-03 |
+| 12 | Teste | 231 | 2022-01-16 | 2022-04-03 | 2022-04-10 | 2026-08-30 | 2026-09-06 |
+| 26 | Treino | 666 | 2004-05-09 | 2004-10-31 | 2004-11-07 | 2017-09-03 | 2017-09-10 |
+| 26 | Validação | 230 | 2017-03-19 | 2017-09-10 | 2017-09-17 | 2022-03-27 | 2022-04-03 |
+| 26 | Teste | 231 | 2021-10-10 | 2022-04-03 | 2022-04-10 | 2026-08-30 | 2026-09-06 |
+
+Datas-base das partições nos demais splits (o último alvo de cada partição é a semana
+seguinte; o do teste é sempre 2026-09-06):
+
+| Split | Treino | Validação | Teste |
+|---|---|---|---|
+| 60/20/20 | até 2017-09-03 | 2017-09-10 a 2022-03-27 | 2022-04-03 a 2026-08-30 |
+| 70/15/15 | até 2019-11-17 | 2019-11-24 a 2023-04-30 | 2023-05-07 a 2026-08-30 |
+| 75/15/10 | até 2021-02-21 | 2021-02-28 a 2024-06-09 | 2024-06-16 a 2026-08-30 |
+| 80/10/10 | até 2022-03-27 | 2022-04-03 a 2024-06-09 | 2024-06-16 a 2026-08-30 |
+
+Pontos a observar nas fronteiras:
+
+- O **alvo da última amostra de treino é o preço da primeira semana de validação** (por
+  exemplo, `t` = 2017-09-03 tem alvo em 2017-09-10), e o da última de validação é o da
+  primeira semana de teste. As partições são disjuntas pela data-base, mas esse rótulo
+  de fronteira pertence ao período seguinte.
+- As **entradas das primeiras amostras de validação e teste incluem semanas da
+  partição anterior** (por exemplo, com janela de 26 semanas, a validação começa a usar
+  entradas de 2017-03-19 e o teste, de 2021-10-10). São dados passados em relação ao
+  instante da previsão, não informação futura.
+- Os **scalers são ajustados nas linhas com `t` até a última semana de treino**; como o
+  alvo dessa linha é o preço da primeira semana de validação, esse único valor entra no
+  ajuste do scaler do alvo (impacto esperado desprezível, mas registrado).
+- No alvo em log-retorno, a primeira linha da série é descartada (não há diferença para
+  ela); a primeira entrada do treino passa a ser 2004-05-16 e a primeira base `t` com
+  janela de 4 semanas, 2004-06-06. Os limites de validação e teste coincidem com os do
+  alvo em nível.
 
 ### Hiperparametrização (Optuna)
 
@@ -133,9 +242,7 @@ e as três arquiteturas na janela de 12 semanas
 no teste: todos os R² de teste são negativos (entre -4,55 e -16,47), enquanto a
 persistência atinge R²=0,979 no teste (MAE 0,039 R$/L, contra 1,24 R$/L do melhor
 modelo recorrente). Mesmo na validação, apenas duas configurações têm R² positivo
-(0,175 e 0,225). Isso não é um sinal de vazamento de dados nem de erro de
-implementação — foi investigado (seção 40 do enunciado) e a causa identificada é a
-**distribuição de preços diferente entre treino, validação e teste**:
+(0,175 e 0,225). Foram feitas checagens de vazamento (ordem temporal dos splits, scalers ajustados só no treino, datas das fronteiras documentadas acima) e não se encontrou indício de vazamento nem de erro de implementação. A explicação mais consistente com as evidências é a **distribuição de preços diferente entre treino, validação e teste**:
 
 | Split | Preço mínimo (R$/L) | Preço máximo (R$/L) | Média (R$/L) |
 |---|---:|---:|---:|
@@ -147,15 +254,11 @@ Com a divisão 60/20/20, o treino termina em setembro/2017 e cobre apenas preço
 R$ 3,85/L; o preço mínimo de validação (R$ 3,80) já é praticamente o máximo do treino
 e o preço mínimo do teste (R$ 4,79) supera em ~R$ 0,94 o máximo do treino — reflexo da
 forte alta de preços de combustíveis no Brasil a partir de 2018, e principalmente de
-2021-2022. Os modelos recorrentes aprendem uma função no espaço padronizado calibrado
-com as estatísticas do treino e extrapolam mal para faixas de preço nunca vistas; a
-persistência, por não depender de nenhuma função ajustada, é imune a essa mudança de
-nível. 
+2021-2022. Uma interpretação plausível é que os modelos recorrentes aprendem uma função no espaço padronizado calibrado com as estatísticas do treino e extrapolam mal para faixas de preço nunca vistas, enquanto a persistência, por não depender de função ajustada, não é afetada pela mudança de nível. Essa é uma hipótese compatível com os dados, não testada isoladamente (por exemplo, por ablação ou por treino com preços deflacionados). 
 
-Um indício adicional do mesmo problema: quase todos os modelos pararam o treinamento
+Um indício adicional, compatível com essa interpretação: quase todos os modelos pararam o treinamento
 cedo (16 a 24 épocas, com `patience=15`), ou seja, a melhor época da validação ocorreu
-nas primeiras épocas (em geral entre a 1ª e a 9ª) e a validação piorou depois disso à
-medida que o modelo se ajustava ao patamar de preços do treino. As exceções foram as
+nas primeiras épocas (em geral entre a 1ª e a 9ª) e a validação piorou depois disso possivelmente à medida que o modelo se ajustava ao patamar de preços do treino. As exceções foram as
 configurações com L2 (100 épocas) e sem regularização (59 épocas) na grade de
 regularização.
 
@@ -209,9 +312,7 @@ semanas e 3,1 s com 26 semanas).
   também (2,2 s, 2,6 s e 3,1 s). A janela de **4 semanas generalizou melhor** (menor
   erro e menor custo). Como apenas ~680 sequências de treino estão disponíveis e a
   variável-alvo já é uma feature em `t`, janelas maiores aumentam a dimensão de entrada
-  sem informação adicional relevante para prever 1 semana à frente. O fator dominante
-  da baixa generalização, de todo modo, é a mudança de patamar de preços (seção 6), e
-  não o tamanho da janela.
+  sem informação adicional relevante para prever 1 semana à frente. A variação entre janelas (diferenças de até ~0,07 R$/L no MAE de validação) é pequena frente ao erro de teste em nível; a hipótese mais consistente para a baixa generalização é a mudança de patamar de preços (seção 6), e não o tamanho da janela.
 
 ## 9. Profundidade e regularização
 
@@ -243,6 +344,7 @@ semanas e 3,1 s com 26 semanas).
   parte fora da faixa vista no treino. Isso limita a validade de qualquer modelo
   treinado com normalização fixa; em um cenário real, seria necessário re-treinar
   periodicamente ou modelar variações (diferenças/retornos) em vez do nível de preço.
+- **Causa não isolada**: a associação entre a falha em nível e a mudança de patamar de preços é uma hipótese sustentada por evidências indiretas (faixas de preço por split, melhora com splits que cobrem preços mais altos e com log-retornos). Não houve ablação separando features de alvo, nem teste com outras transformações (por exemplo, preços deflacionados), então outras causas (mudanças de regime, de volatilidade e de abrangência da pesquisa) não podem ser descartadas.
 - **Seleção de modelos prejudicada**: como a própria validação também está fora da faixa
   de treino, o MAE de validação é um critério ruidoso para escolher entre modelos que
   extrapolam mal; os rankings entre arquiteturas variaram entre os recortes 70/15/15 e
@@ -283,16 +385,13 @@ GRU com 128 unidades. A SimpleRNN foi a mais leve e rápida, e a LSTM com 64 uni
 a menos eficaz, só se aproximando das demais com 128 unidades. Janelas curtas (4
 semanas), mais unidades e regularização L2 foram os fatores que mais reduziram o erro de
 validação. Nenhuma das três arquiteturas superou o baseline de persistência no conjunto
-de teste (nem na validação), resultado explicado por uma mudança real e mensurável de
-patamar de preços entre os períodos de treino e validação/teste — não por vazamento de
-dados, erro de implementação ou métricas fabricadas. Todos os números deste relatório
+de teste (nem na validação), resultado que as evidências disponíveis associam a uma mudança mensurável de patamar de preços entre os períodos de treino e validação/teste (hipótese não testada isoladamente); as checagens realizadas não indicaram vazamento de dados nem erro de implementação. Todos os números deste relatório
 foram extraídos de `results/experiments.csv`, `results/optuna_trials.csv` e do log da
 execução de `python -m src.run_experiments`.
 
 ## 12. Etapa 2 — Reformulação com log-retornos (tratamento da não estacionariedade)
 
-Como a causa da degradação no teste é a mudança de patamar de preços (seção 6), o
-problema foi reformulado: features e alvo passaram a ser **log-retornos semanais**
+Como a hipótese mais consistente com as evidências para a degradação no teste é a mudança de patamar de preços (seção 6), o problema foi reformulado: features e alvo passaram a ser **log-retornos semanais**
 (`log(x_t / x_{t-1})` nas features; alvo `r = log(y_{t+1} / y_t)`), e o preço previsto é
 reconstruído como `y_t · exp(r̂)`. A persistência equivale a `r̂ = 0`. Mesmo split
 60/20/20, escalonamento ajustado só no treino, mesma grade (3 janelas × 3 arquiteturas,
@@ -311,8 +410,7 @@ Código em `src/run_experiments_delta.py`; resultados em
 | **SimpleRNN w4 (retorno, Optuna: 32 un., 1 camada)** | **0,0313** | 0,0400 | 0,0784 | 0,9806 |
 
 - O MAE de teste caiu de 1,317 para ~0,040 R$/L (redução de ~97%) e o R² de teste foi de
-  -5,306 para ~0,98, confirmando que a falha anterior era de representação (nível de
-  preço não estacionário), não de capacidade das redes.
+  -5,306 para ~0,98, o que é consistente com a hipótese de que a falha anterior estava associada à representação (nível de preço não estacionário) e não apenas à capacidade das redes. Como features e alvo foram alterados em conjunto, o experimento não isola o efeito de cada mudança nem prova que essa seja a única causa.
 - Frente à persistência, os modelos de retorno têm **MAE de validação menor** (0,0313
   contra 0,0356) e **RMSE de teste ligeiramente menor** (0,077-0,078 contra 0,082,
   SimpleRNN), mas **MAE de teste praticamente igual ou levemente pior** (0,040 contra
@@ -368,8 +466,7 @@ Observações:
   0,86 (75/15/10) e 0,15 (80/10/10). Só no 80/10/10, em que o treino já contém o pico de
   R$ 7,27 e todo o intervalo de preços do teste, o R² de teste fica positivo (0,64 na
   melhor configuração; as médias por arquitetura variam de -0,23 a 0,32). Mesmo assim o
-  MAE (0,085 na melhor, 0,15 na média) é 4 a 8 vezes o da persistência (0,0196). Isso
-  corrobora que a falha em nível é de extrapolação, não de capacidade.
+  MAE (0,085 na melhor, 0,15 na média) é 4 a 8 vezes o da persistência (0,0196). Isso é consistente com a hipótese de que a falha em nível está ligada à extrapolação para faixas de preço não vistas, embora o experimento não isole essa causa de outras diferenças entre os períodos (volatilidade, regime de preços).
 - **Em log-retorno, o erro é estável e baixo em todos os splits** (R² de teste de 0,97 a
   0,98), e a conclusão da seção 12 se mantém: o **MAE de validação é menor que o da
   persistência em todos os splits** (por exemplo 0,0529 contra 0,0589 no 80/10/10), o
@@ -390,8 +487,7 @@ Observações:
   por configuração; não há base para apontar uma arquitetura como superior de forma
   geral.
 - **Conclusão da seção**: o split mais favorável para o alvo em nível é o 80/10/10, mas
-  isso ocorre por incluir no treino o patamar de preços recente; a reformulação em
-  log-retorno resolve o problema independentemente do split. Em nenhum cenário as redes
+  isso ocorre por incluir no treino o patamar de preços recente; a reformulação em log-retorno manteve desempenho estável em todos os splits avaliados. Em nenhum cenário as redes
   superaram claramente o baseline de persistência no conjunto de teste.
 
 ## 14. Comparação final com a persistência e conclusão geral
@@ -406,8 +502,7 @@ validação em cada etapa (ambos com busca Optuna) contra o baseline:
 | Persistência | 0,0356 | **0,0391** | 0,0818 | 0,9788 |
 
 - **Etapa 1**: a GRU foi a melhor rede recorrente na validação, mas a avaliação em teste
-  mostra generalização insatisfatória, causada pela mudança de patamar de preços e não
-  por vazamento ou erro de implementação (seção 6).
+  mostra generalização insatisfatória, associada, segundo a hipótese mais consistente com as evidências, à mudança de patamar de preços (seção 6); as checagens realizadas não indicaram vazamento nem erro de implementação.
 - **Etapa 2**: a representação em log-retorno reduz o MAE de teste em ~97% e leva o R²
   de teste a ~0,98; a SimpleRNN passou a ser a melhor arquitetura na validação.
 - **Persistência**: tem o **menor MAE de teste** (0,0391) entre as referências
@@ -415,8 +510,7 @@ validação em cada etapa (ambos com busca Optuna) contra o baseline:
   melhores; como cada configuração foi treinada uma vez (seed 42), não há evidência de
   superioridade de nenhum dos dois. Nos demais splits (seção 13) a persistência também
   mantém o menor MAE de teste.
-- **Conclusão geral**: o ganho decisivo veio da representação dos dados (log-retornos),
-  não da escolha da arquitetura. Com a representação adequada, as redes recorrentes
+- **Conclusão geral**: a maior melhora observada coincidiu com a mudança de representação (log-retornos) e foi muito maior que as diferenças entre arquiteturas; como a mudança foi feita em conjunto (features e alvo), o ganho é atribuído à reformulação como um todo, sem isolar cada componente. Com a representação adequada, as redes recorrentes
   igualam, mas não superam de forma clara, o baseline de persistência.
 
 ## Anexo — Tabelas do dataset no DuckDB (visualização no DBeaver)
