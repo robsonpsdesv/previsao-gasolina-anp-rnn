@@ -249,7 +249,20 @@ semanas e 3,1 s com 26 semanas).
 
 ## 11. Conclusão
 
-Sob um protocolo controlado (mesmos dados, split 60/20/20, normalização, otimizador,
+A arquitetura GRU apresentou o melhor desempenho relativo entre as redes recorrentes
+avaliadas, obtendo os menores valores de MAE de validação nas três janelas temporais
+investigadas. A otimização de hiperparâmetros com Optuna reduziu o MAE de validação
+para 0,446 R$/L, resultado possivelmente associado à capacidade da GRU de controlar a
+retenção e a atualização de informações temporais por meio de suas portas internas.
+
+Entretanto, a avaliação no conjunto de teste revelou uma degradação significativa do
+desempenho, com MAE de 1,317 R$/L e R² de -5,306. Além disso, o baseline de persistência
+apresentou resultados substancialmente superiores. Portanto, embora a GRU tenha sido a
+arquitetura neural mais promissora na etapa de validação, os resultados não sustentam
+sua superioridade preditiva em relação ao baseline, sendo necessárias investigações
+adicionais sobre generalização e metodologia de avaliação.
+
+Detalhamento: sob um protocolo controlado (mesmos dados, split 60/20/20, normalização, otimizador,
 loss e callbacks), a **GRU foi a arquitetura recorrente mais eficaz** para prever o
 preço da gasolina em `t+1` neste recorte: ficou com as três melhores configurações, com
 destaque para a busca Optuna (GRU de 2 camadas, 96 unidades, janela de 4 semanas) e para
@@ -262,3 +275,38 @@ patamar de preços entre os períodos de treino e validação/teste — não por
 dados, erro de implementação ou métricas fabricadas. Todos os números deste relatório
 foram extraídos de `results/experiments.csv`, `results/optuna_trials.csv` e do log da
 execução de `python -m src.run_experiments`.
+
+## 12. Reformulação com log-retornos (tratamento da não estacionariedade)
+
+Como a causa da degradação no teste é a mudança de patamar de preços (seção 6), o
+problema foi reformulado: features e alvo passaram a ser **log-retornos semanais**
+(`log(x_t / x_{t-1})` nas features; alvo `r = log(y_{t+1} / y_t)`), e o preço previsto é
+reconstruído como `y_t · exp(r̂)`. A persistência equivale a `r̂ = 0`. Mesmo split
+60/20/20, escalonamento ajustado só no treino, mesma grade (3 janelas × 3 arquiteturas,
+64 unidades, dropout 0,2) e mesma busca Optuna (20 tentativas), com métricas em R$/L.
+Código em `src/run_experiments_delta.py`; resultados em
+[`results/experiments_delta.csv`](../results/experiments_delta.csv),
+`results/optuna_delta_trials.csv` e `results/optuna_delta_best_params.json`.
+
+| Modelo | MAE val | MAE teste | RMSE teste | R² teste |
+|---|---:|---:|---:|---:|
+| Persistência | 0,0356 | 0,0391 | 0,0818 | 0,9788 |
+| GRU w4 (nível, Optuna — seção 5) | 0,446 | 1,317 | 1,411 | -5,306 |
+| SimpleRNN w4 (retorno, 64 un.) | 0,0323 | 0,0403 | 0,0774 | 0,9810 |
+| GRU w4 (retorno, 64 un.) | 0,0331 | 0,0411 | 0,0815 | 0,9790 |
+| LSTM w4 (retorno, 64 un.) | 0,0341 | 0,0409 | 0,0821 | 0,9786 |
+| **SimpleRNN w4 (retorno, Optuna: 32 un., 1 camada)** | **0,0313** | 0,0400 | 0,0784 | 0,9806 |
+
+- O MAE de teste caiu de 1,317 para ~0,040 R$/L (redução de ~97%) e o R² de teste foi de
+  -5,306 para ~0,98, confirmando que a falha anterior era de representação (nível de
+  preço não estacionário), não de capacidade das redes.
+- Frente à persistência, os modelos de retorno têm **MAE de validação menor** (0,0313
+  contra 0,0356) e **RMSE de teste ligeiramente menor** (0,077-0,078 contra 0,082,
+  SimpleRNN), mas **MAE de teste praticamente igual ou levemente pior** (0,040 contra
+  0,0391). Portanto, as redes agora igualam o baseline, sem evidência de superioridade
+  clara; diferenças dessa magnitude vêm de uma única execução (seed 42) e não devem ser
+  tratadas como significativas.
+- Com a representação estacionária, o ranking entre arquiteturas mudou: a SimpleRNN
+  ficou na frente da GRU e da LSTM (e foi escolhida pelo Optuna), de modo que a
+  superioridade da GRU observada na seção 4 está associada ao regime de extrapolação em
+  nível, e não a uma vantagem geral da arquitetura.

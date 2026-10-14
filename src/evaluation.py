@@ -28,6 +28,15 @@ def regression_metrics(y_true_scaled: np.ndarray, y_pred_scaled: np.ndarray, tar
     return {"mae": mae, "rmse": rmse, "r2": r2}
 
 
+def price_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
+    """MAE, RMSE e R² para preços já em R$/litro."""
+    return {
+        "mae": mean_absolute_error(y_true, y_pred),
+        "rmse": float(np.sqrt(mean_squared_error(y_true, y_pred))),
+        "r2": r2_score(y_true, y_pred),
+    }
+
+
 def plot_training_curves(history, title: str, out_path):
     fig, axes = plt.subplots(1, 2, figsize=(11, 4))
     axes[0].plot(history["loss"], label="treino")

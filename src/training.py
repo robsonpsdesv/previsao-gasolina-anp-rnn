@@ -16,6 +16,7 @@ from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from . import config
 from .models import ModelConfig, build_model
 from .preprocessing import (
+    FEATURE_COLUMNS,
     TARGET_COLUMN,
     apply_scalers,
     build_processed_dataset,
@@ -33,9 +34,27 @@ def load_or_build_processed_df() -> pd.DataFrame:
     return build_processed_dataset()
 
 
-def prepare_window_data(window_size: int, horizon: int = config.HORIZON):
-    """Retorna sequências de treino/validação/teste e os scalers ajustados no treino."""
+def to_log_return_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Converte features e alvo em log-retornos semanais (estacionários), preservando o preço em t."""
+    out = pd.DataFrame(np.log(df[FEATURE_COLUMNS]).diff(), index=df.index)
+    out[TARGET_COLUMN] = np.log(df[TARGET_COLUMN] / df["gasolina_preco_medio"])
+    out["preco_t"] = df["gasolina_preco_medio"]
+    out["preco_t_mais_1"] = df[TARGET_COLUMN]
+    return out.iloc[1:]  # a 1ª linha não tem diferença
+
+
+def prepare_window_data(window_size: int, horizon: int = config.HORIZON, target_mode: str = "level"):
+    """Retorna sequências de treino/validação/teste e os scalers ajustados no treino.
+
+    target_mode="level": alvo = preço em t+1 (padronizado).
+    target_mode="delta": features e alvo em log-retorno semanal; o preço é reconstruído em
+    train_experiment como preco_t * exp(retorno previsto).
+    """
     df = load_or_build_processed_df()
+    if target_mode == "delta":
+        df = to_log_return_frame(df)
+    elif target_mode != "level":
+        raise ValueError(f"target_mode inválido: {target_mode}")
     train_df, val_df, test_df = chronological_split(df)
 
     feature_scaler, target_scaler = fit_scalers(train_df)
@@ -53,6 +72,11 @@ def prepare_window_data(window_size: int, horizon: int = config.HORIZON):
         "val": (X_seq[val_mask], y_seq[val_mask], seq_dates[val_mask]),
         "test": (X_seq[test_mask], y_seq[test_mask], seq_dates[test_mask]),
     }
+    if target_mode == "delta":
+        prices = df[["preco_t", "preco_t_mais_1"]].values[window_size - 1:]
+        return splits, feature_scaler, target_scaler, {
+            "val": prices[val_mask], "test": prices[test_mask],
+        }
     return splits, feature_scaler, target_scaler
 
 
@@ -70,11 +94,13 @@ def train_experiment(
     patience: int = config.EARLY_STOPPING_PATIENCE,
     seed: int = config.SEED,
     verbose: int = 0,
+    target_mode: str = "level",
 ):
     """Treina uma configuração e retorna métricas, histórico, tempo e o modelo treinado."""
     set_seeds(seed)
 
-    splits, feature_scaler, target_scaler = prepare_window_data(window_size)
+    prepared = prepare_window_data(window_size, target_mode=target_mode)
+    splits, feature_scaler, target_scaler = prepared[:3]
     X_train, y_train, dates_train = splits["train"]
     X_val, y_val, dates_val = splits["val"]
     X_test, y_test, dates_test = splits["test"]
@@ -140,6 +166,12 @@ def train_experiment(
         "y_test_pred": y_test_pred,
         "dates_test": dates_test,
     }
+    if target_mode == "delta":
+        for split, y_pred in ("val", y_val_pred), ("test", y_test_pred):
+            preco_t, preco_real = prepared[3][split].T
+            ret = target_scaler.inverse_transform(y_pred).ravel()
+            artifacts[f"price_true_{split}"] = preco_real
+            artifacts[f"price_pred_{split}"] = preco_t * np.exp(ret)
     return result, artifacts
 
 
