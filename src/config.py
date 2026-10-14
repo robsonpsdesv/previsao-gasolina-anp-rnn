@@ -1,18 +1,17 @@
-"""Configuração central do projeto: caminhos, seeds e validação do HD externo BinEXT.
+"""Configuração central do projeto: caminhos, seeds e criação dos diretórios.
 
-Regra obrigatória do trabalho: todo o dataset (raw/processed/intermediate/metadata/cache)
-deve residir exclusivamente em /Volumes/BinEXT/datasets/anp_combustiveis/. Nada disso pode
-cair no SSD interno. Se o BinEXT não estiver montado, a execução deve parar aqui.
+Todo o dataset (raw/processed/intermediate/metadata/cache) reside em
+<projeto>/datasets/anp_combustiveis/ (ignorado pelo git).
 """
 import os
 import shutil
 from pathlib import Path
 
-# --- Unidade externa obrigatória -------------------------------------------------
-EXTERNAL_DRIVE = Path("/Volumes/BinEXT")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+# --- Dataset dentro do projeto ---------------------------------------------------
 DATA_ROOT = Path(
-    os.environ.get("ANP_DATA_ROOT", "/Volumes/BinEXT/datasets/anp_combustiveis")
+    os.environ.get("ANP_DATA_ROOT", PROJECT_ROOT / "datasets" / "anp_combustiveis")
 )
 
 RAW_DIR = DATA_ROOT / "raw"
@@ -22,7 +21,6 @@ METADATA_DIR = DATA_ROOT / "metadata"
 CACHE_DIR = DATA_ROOT / "cache"
 
 # --- Diretórios do projeto (código, notebooks, resultados, relatório) -----------
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RESULTS_DIR = PROJECT_ROOT / "results"
 FIGURES_DIR = RESULTS_DIR / "figures"
 MODELS_DIR = RESULTS_DIR / "models"
@@ -53,46 +51,27 @@ BATCH_SIZE = 32
 MAX_EPOCHS = 100
 LEARNING_RATE = 1e-3
 EARLY_STOPPING_PATIENCE = 15
-TRAIN_FRAC = 0.70
-VAL_FRAC = 0.15
-TEST_FRAC = 0.15
+TRAIN_FRAC = 0.60
+VAL_FRAC = 0.20
+TEST_FRAC = 0.20
 
 SEED = 42
 
 
-def validate_external_drive(min_free_gb: float = 1.0) -> None:
-    """Garante que o BinEXT está montado, legível, gravável e com espaço livre.
+def validate_data_dirs(min_free_gb: float = 1.0) -> None:
+    """Cria os diretórios de dados/resultados e verifica o espaço livre em disco."""
+    DATA_ROOT.mkdir(parents=True, exist_ok=True)
 
-    Interrompe a execução (RuntimeError) em vez de usar o SSD interno como fallback.
-    """
-    if not EXTERNAL_DRIVE.exists():
-        raise RuntimeError(
-            f"A unidade externa BinEXT não está montada em {EXTERNAL_DRIVE}. "
-            "Conecte o HD externo antes de executar o pipeline."
-        )
-
-    if not os.access(EXTERNAL_DRIVE, os.R_OK):
-        raise RuntimeError(f"Sem permissão de leitura em {EXTERNAL_DRIVE}.")
-
-    if not os.access(EXTERNAL_DRIVE, os.W_OK):
-        raise RuntimeError(f"Sem permissão de escrita em {EXTERNAL_DRIVE}.")
-
-    if not str(DATA_ROOT.resolve()).startswith(str(EXTERNAL_DRIVE.resolve())):
-        raise RuntimeError(
-            f"DATA_ROOT ({DATA_ROOT}) não está localizado abaixo de {EXTERNAL_DRIVE}."
-        )
-
-    total, used, free = shutil.disk_usage(EXTERNAL_DRIVE)
+    total, _, free = shutil.disk_usage(DATA_ROOT)
     free_gb = free / (1024 ** 3)
     if free_gb < min_free_gb:
         raise RuntimeError(
-            f"Espaço livre insuficiente em {EXTERNAL_DRIVE}: {free_gb:.2f} GB "
+            f"Espaço livre insuficiente em {DATA_ROOT}: {free_gb:.2f} GB "
             f"(mínimo exigido: {min_free_gb} GB)."
         )
 
-    print(f"[BinEXT] Unidade montada em {EXTERNAL_DRIVE}")
-    print(f"[BinEXT] DATA_ROOT = {DATA_ROOT}")
-    print(f"[BinEXT] Espaço livre: {free_gb:.2f} GB de {total / (1024 ** 3):.2f} GB")
+    print(f"[config] DATA_ROOT = {DATA_ROOT}")
+    print(f"[config] Espaço livre: {free_gb:.2f} GB de {total / (1024 ** 3):.2f} GB")
 
     for d in (RAW_DIR, PROCESSED_DIR, INTERMEDIATE_DIR, METADATA_DIR, CACHE_DIR):
         d.mkdir(parents=True, exist_ok=True)
@@ -102,4 +81,4 @@ def validate_external_drive(min_free_gb: float = 1.0) -> None:
 
 
 if __name__ == "__main__":
-    validate_external_drive()
+    validate_data_dirs()

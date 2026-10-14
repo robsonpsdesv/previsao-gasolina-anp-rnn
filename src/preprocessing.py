@@ -3,7 +3,7 @@
 Pivota os produtos de interesse para formato largo (uma linha por semana),
 cria a variável alvo (preço médio de revenda da gasolina em t+1), valida a
 integridade da série (ordem temporal, ausência de NaN, frequência semanal) e
-persiste a versão processada em BinEXT.
+persiste a versão processada em PROCESSED_DIR.
 """
 import numpy as np
 import pandas as pd
@@ -146,7 +146,7 @@ def build_processed_dataset(save: bool = True) -> pd.DataFrame:
 
     if save:
         target_path = config.PROCESSED_DIR / "serie_semanal_nacional.parquet"
-        assert str(target_path.resolve()).startswith(str(config.EXTERNAL_DRIVE.resolve()))
+        target_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_parquet(target_path)
         print(f"[preprocessing] Dataset processado salvo em {target_path}")
     return df

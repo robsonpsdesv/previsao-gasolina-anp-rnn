@@ -5,16 +5,6 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 
-# Dataset: NUNCA deve ser versionado no repositório.
-# Todo o dataset (bruto, processado, intermediário, cache, metadados) vive em
-# /Volumes/BinEXT/datasets/anp_combustiveis/ e não deve ser copiado para o projeto.
-data/
-datasets/
-*.parquet
-*.xlsx
-*.xlsb
-*.xls
-
 # Sistema
 .DS_Store
 

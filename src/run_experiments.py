@@ -28,6 +28,7 @@ from .training import persistence_baseline, train_experiment
 from .utils import environment_report, set_seeds
 
 rows = []
+_runs = []  # (mae_val, tag, nome, modelo, art) para salvar os top-3 ao final
 
 
 def _add_row(tag, cell_type, window_size, units, n_layers, dropout, l2, result, val_metrics, test_metrics):
@@ -75,21 +76,35 @@ def run_and_record(tag, cell_type, window_size, units=64, n_layers=1, dropout=0.
 
     _add_row(tag, cell_type, window_size, units, n_layers, dropout, l2, result, val_metrics, test_metrics)
 
+    name = f"{tag}_{cell_type}_w{window_size}_u{units}_L{n_layers}"
+    _runs.append((val_metrics["mae"], name, art))
     if save_plots:
-        name = f"{tag}_{cell_type}_w{window_size}_u{units}_L{n_layers}"
-        plot_training_curves(art["history"], name, config.FIGURES_DIR / f"curvas_{name}.png")
-        y_test_true = art["target_scaler"].inverse_transform(art["y_test"])
-        y_test_pred = art["target_scaler"].inverse_transform(art["y_test_pred"])
-        plot_prediction_vs_real(
-            art["dates_test"], y_test_true, y_test_pred,
-            f"{name} - Teste: real x previsto", config.FIGURES_DIR / f"real_vs_previsto_{name}.png",
-        )
-        plot_residuals(
-            art["dates_test"], y_test_true.ravel(), y_test_pred.ravel(),
-            name, config.FIGURES_DIR / f"residuos_{name}.png",
-        )
+        _save_figures(name, art)
 
     return result, art, val_metrics, test_metrics
+
+
+def _save_figures(name, art):
+    plot_training_curves(art["history"], name, config.FIGURES_DIR / f"curvas_{name}.png")
+    y_test_true = art["target_scaler"].inverse_transform(art["y_test"])
+    y_test_pred = art["target_scaler"].inverse_transform(art["y_test_pred"])
+    plot_prediction_vs_real(
+        art["dates_test"], y_test_true, y_test_pred,
+        f"{name} - Teste: real x previsto", config.FIGURES_DIR / f"real_vs_previsto_{name}.png",
+    )
+    plot_residuals(
+        art["dates_test"], y_test_true.ravel(), y_test_pred.ravel(),
+        name, config.FIGURES_DIR / f"residuos_{name}.png",
+    )
+
+
+def save_top3():
+    """Salva modelos e figuras das 3 melhores configurações por MAE de validação."""
+    for rank, (mae_val, name, art) in enumerate(sorted(_runs, key=lambda r: r[0])[:3], start=1):
+        top_name = f"top{rank}_{name}"
+        art["model"].save(config.MODELS_DIR / f"{top_name}.keras")
+        _save_figures(top_name, art)
+        print(f"[run_experiments] top{rank}: {name} (MAE val={mae_val:.4f})")
 
 
 def run_baseline():
@@ -227,6 +242,7 @@ def main():
     # --- consolida experiments.csv ---
     df_results = pd.DataFrame(rows)
     df_results.to_csv(config.EXPERIMENTS_CSV, index=False)
+    save_top3()
     print(f"\n[run_experiments] Tabela de experimentos salva em {config.EXPERIMENTS_CSV}")
     print(f"[run_experiments] Tempo total: {(time.perf_counter() - t0) / 60:.1f} min")
 

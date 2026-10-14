@@ -20,18 +20,17 @@ nível **Brasil** (nacional).
 
 - Fonte oficial: [gov.br/anp — Série histórica do levantamento de preços](https://www.gov.br/anp/pt-br/assuntos/precos-e-defesa-da-concorrencia/precos/precos-revenda-e-de-distribuicao-combustiveis/serie-historica-do-levantamento-de-precos)
 - Portal de Dados Abertos: [dados.gov.br — Série Histórica de Preços de Combustíveis e de GLP](https://dados.gov.br/dados/conjuntos-dados/serie-historica-de-precos-de-combustiveis-e-de-glp)
-- Arquivos utilizados (baixados diretamente para o BinEXT):
+- Arquivos utilizados (baixados diretamente para `datasets/anp_combustiveis/raw/`):
   - `semanal-brasil-2004-a-2012.xlsx` (09/05/2004 a 29/12/2012)
   - `semanal-brasil-desde-2013.xlsx` (30/12/2012 até a atualização mais recente)
 
-### Requisito obrigatório: HD externo BinEXT
+### Localização do dataset
 
-**Este projeto exige que a unidade externa `BinEXT` esteja conectada e montada em
-`/Volumes/BinEXT` antes de qualquer execução.** Todo o dataset (arquivos brutos,
-processados, intermediários, cache e metadados) reside exclusivamente em:
+Todo o dataset (arquivos brutos, processados, intermediários, cache e metadados)
+reside dentro do projeto, em (ignorado pelo git):
 
 ```text
-/Volumes/BinEXT/datasets/anp_combustiveis/
+datasets/anp_combustiveis/
 ├── raw/            # XLSX originais da ANP (imutáveis)
 ├── processed/       # série semanal nacional tratada (parquet)
 ├── intermediate/     # artefatos intermediários
@@ -39,9 +38,7 @@ processados, intermediários, cache e metadados) reside exclusivamente em:
 └── cache/
 ```
 
-Se o BinEXT não estiver montado, `src/config.py` interrompe a execução com uma
-mensagem clara — não há fallback para o SSD interno. O código não copia dados de
-volta para o repositório.
+O caminho pode ser sobrescrito pela variável de ambiente `ANP_DATA_ROOT`.
 
 ## Problema de aprendizado
 
@@ -51,7 +48,7 @@ volta para o repositório.
   hidratado; preço médio do óleo diesel.
 - **Horizonte**: 1 semana à frente (one-step-ahead).
 - **Janelas testadas**: 4, 12 e 26 semanas.
-- **Split cronológico**: ~70% treino / 15% validação / 15% teste, sem embaralhamento.
+- **Split cronológico**: 60% treino / 20% validação / 20% teste, sem embaralhamento.
 - **Normalização**: `StandardScaler` ajustado somente no treino.
 
 ## Estrutura do projeto
@@ -60,8 +57,18 @@ volta para o repositório.
 projeto-anp/
 ├── README.md
 ├── requirements.txt
+├── datasets/               # versionado (ver datasets/README.md)
+│   ├── README.md           # criação/consulta do banco DuckDB e conexão no DBeaver
+│   ├── init.sql            # cria as tabelas do DuckDB a partir do dataset
+│   ├── anp.duckdb          # banco DuckDB gerado
+│   └── anp_combustiveis/
+│       ├── raw/            # XLSX originais da ANP
+│       ├── processed/      # série semanal nacional (parquet)
+│       ├── intermediate/
+│       ├── metadata/
+│       └── cache/
 ├── src/
-│   ├── config.py          # caminhos, validação do BinEXT, seeds
+│   ├── config.py          # caminhos, criação de diretórios, seeds
 │   ├── data_loader.py      # download/leitura resiliente dos XLSX da ANP
 │   ├── preprocessing.py    # pivot, alvo, checks, split cronológico, scalers
 │   ├── sequences.py        # create_sequences(X, y, window_size, horizon)
@@ -93,11 +100,10 @@ pip install -r requirements.txt
 ## Execução
 
 ```bash
-# 1. Confirme que o BinEXT está montado em /Volumes/BinEXT
-# 2. Baixa dados (se necessário) e constrói a série processada
+# 1. Baixa dados (se necessário) e constrói a série processada
 python -m src.preprocessing
 
-# 3. Roda toda a grade de experimentos (baseline, janelas, arquiteturas,
+# 2. Roda toda a grade de experimentos (baseline, janelas, arquiteturas,
 #    unidades, profundidade, regularização e busca Optuna)
 python -m src.run_experiments
 ```

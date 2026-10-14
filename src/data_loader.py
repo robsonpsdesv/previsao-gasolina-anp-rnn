@@ -1,4 +1,4 @@
-"""Carregamento dos dados brutos da ANP diretamente do BinEXT.
+"""Carregamento dos dados brutos da ANP de datasets/anp_combustiveis.
 
 Faz o download (se necessário, direto para RAW_DIR) e a leitura resiliente das
 planilhas semanais nacionais, cujo schema muda ligeiramente entre os arquivos
@@ -21,7 +21,7 @@ def _strip_accents(text: str) -> str:
 
 def ensure_raw_files_downloaded() -> list[Path]:
     """Garante que os arquivos brutos existam em RAW_DIR, baixando somente se necessário."""
-    config.validate_external_drive()
+    config.validate_data_dirs()
     paths = []
     for name, url in config.ANP_SOURCE_URLS.items():
         filename = url.rsplit("/", 1)[-1]
