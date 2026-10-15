@@ -1,5 +1,5 @@
 {
-  "best_value_mae_val": 0.4456496834754944,
+  "best_value_mae_val": 0.43509960174560547,
   "best_params": {
     "units": 96,
     "n_layers": 2,

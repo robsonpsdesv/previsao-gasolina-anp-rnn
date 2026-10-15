@@ -96,14 +96,21 @@ def run_data_quality_checks(df: pd.DataFrame) -> None:
     print(f"[preprocessing] OK: {df.shape[0]} semanas, {n_features} features, sem NaN, sem duplicatas")
 
 
-def chronological_split(df: pd.DataFrame, train_frac=config.TRAIN_FRAC, val_frac=config.VAL_FRAC):
+def chronological_split(df: pd.DataFrame, train_frac=config.TRAIN_FRAC, val_frac=config.VAL_FRAC,
+                        horizon: int = config.HORIZON):
+    """Split cronológico em que os ALVOS (t+horizon) de cada partição ficam dentro do seu período.
+
+    As fronteiras por data-alvo seguem as frações; as linhas (data-base t) de treino e validação
+    terminam `horizon` linhas antes, para que o alvo da última linha de uma partição não caia
+    na partição seguinte (nem entre no ajuste dos scalers).
+    """
     n = len(df)
     n_train = int(n * train_frac)
     n_val = int(n * val_frac)
 
-    train = df.iloc[:n_train]
-    val = df.iloc[n_train:n_train + n_val]
-    test = df.iloc[n_train + n_val:]
+    train = df.iloc[:n_train - horizon]
+    val = df.iloc[n_train - horizon:n_train + n_val - horizon]
+    test = df.iloc[n_train + n_val - horizon:]
 
     assert train.index.max() < val.index.min(), "Vazamento: treino sobrepõe validação"
     assert val.index.max() < test.index.min(), "Vazamento: validação sobrepõe teste"

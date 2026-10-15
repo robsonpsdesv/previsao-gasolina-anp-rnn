@@ -146,8 +146,10 @@ def boundary_table() -> pd.DataFrame:
             for window in config.WINDOW_SIZES:
                 splits = prepare_window_data(window, target_mode=mode, split_fracs=fracs)[0]
                 base_index = dates if mode == "level" else dates[1:]
+                targets = {}
                 for part, (X, _, seq_dates) in splits.items():
                     first_base, last_base = seq_dates.min(), seq_dates.max()
+                    targets[part] = (next_date[first_base], next_date[last_base])
                     first_input = base_index[base_index.get_loc(first_base) - window + 1]
                     rows.append({
                         "split": label, "alvo": mode, "janela": window, "particao": part,
@@ -157,6 +159,9 @@ def boundary_table() -> pd.DataFrame:
                         "ultima_entrada_t": last_base.date(),
                         "ultimo_alvo_t_mais_1": next_date[last_base].date(),
                     })
+                # Nenhum alvo de uma partição pode cair no período de alvos da seguinte.
+                assert targets["train"][1] < targets["val"][0] and targets["val"][1] < targets["test"][0], \
+                    f"Vazamento de alvos nas fronteiras ({label}, {mode}, janela {window})"
     return pd.DataFrame(rows)
 
 

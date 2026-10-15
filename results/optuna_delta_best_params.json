@@ -1,11 +1,11 @@
 {
-  "best_value_mae_val": 0.03128119543117026,
+  "best_value_mae_val": 0.031256364950148954,
   "best_params": {
-    "units": 32,
-    "n_layers": 1,
-    "dropout": 0.02904180608409973,
-    "learning_rate": 0.0029621516588303515,
-    "batch_size": 32
+    "units": 64,
+    "n_layers": 2,
+    "dropout": 0.12464611457443747,
+    "learning_rate": 0.0004979987773685088,
+    "batch_size": 16
   },
   "cell_type": "SimpleRNN",
   "window_size": 4
