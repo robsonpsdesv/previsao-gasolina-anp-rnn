@@ -37,18 +37,21 @@ def price_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     }
 
 
-def plot_training_curves(history, title: str, out_path):
+def plot_training_curves(history, title: str, out_path, scale: float = 1.0, unit: str = "z"):
+    """Curvas de loss (MSE) e MAE; `scale` (desvio do scaler do alvo) converte da escala z para `unit`."""
     fig, axes = plt.subplots(1, 2, figsize=(11, 4))
-    axes[0].plot(history["loss"], label="treino")
-    axes[0].plot(history["val_loss"], label="validação")
+    axes[0].plot(np.asarray(history["loss"]) * scale ** 2, label="treino")
+    axes[0].plot(np.asarray(history["val_loss"]) * scale ** 2, label="validação")
     axes[0].set_title(f"{title} - Loss (MSE)")
     axes[0].set_xlabel("época")
+    axes[0].set_ylabel(f"MSE ({unit})²")
     axes[0].legend()
 
-    axes[1].plot(history["mae"], label="treino")
-    axes[1].plot(history["val_mae"], label="validação")
+    axes[1].plot(np.asarray(history["mae"]) * scale, label="treino")
+    axes[1].plot(np.asarray(history["val_mae"]) * scale, label="validação")
     axes[1].set_title(f"{title} - MAE")
     axes[1].set_xlabel("época")
+    axes[1].set_ylabel(f"MAE ({unit})")
     axes[1].legend()
 
     fig.tight_layout()

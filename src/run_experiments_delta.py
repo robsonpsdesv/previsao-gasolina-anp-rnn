@@ -40,6 +40,7 @@ def run_and_record(tag, cell_type, window, units=64, n_layers=1, dropout=0.2, **
         "mae_val": val["mae"], "rmse_val": val["rmse"], "r2_val": val["r2"],
         "mae_test": test["mae"], "rmse_test": test["rmse"], "r2_test": test["r2"],
         "tempo_treino_s": result["train_time_seconds"],
+        "tempo_epoca_mediano_s": result["tempo_epoca_mediano_s"],
     })
     _runs.append((val["mae"], f"{tag}_{cell_type}_w{window}_u{units}_L{n_layers}", art))
     return val, test
@@ -99,7 +100,8 @@ def main():
     pd.DataFrame(rows).to_csv(OUT_CSV, index=False)
     mae_val, name, art = min(_runs, key=lambda r: r[0])
     art["model"].save(config.MODELS_DIR / f"delta_best_{name}.keras")
-    plot_training_curves(art["history"], name, config.FIGURES_DIR / f"delta_curvas_{name}.png")
+    plot_training_curves(art["history"], name, config.FIGURES_DIR / f"delta_curvas_{name}.png",
+                         scale=float(art["target_scaler"].scale_[0]), unit="log-retorno")
     plot_prediction_vs_real(art["dates_test"], art["price_true_test"], art["price_pred_test"],
                             f"{name} (retorno) - Teste: real x previsto",
                             config.FIGURES_DIR / f"delta_real_vs_previsto_{name}.png")

@@ -84,6 +84,8 @@ projeto-anp/
 │   ├── run_experiments.py        # Etapa 1: grade completa em nível + Optuna
 │   ├── run_experiments_delta.py  # Etapa 2: grade em log-retorno + Optuna
 │   ├── run_experiments_splits.py # splits 60/20/20, 70/15/15, 75/15/10, 80/10/10
+│   ├── run_experiments_cv.py     # CV temporal (TimeSeriesSplit) + walk-forward com re-treino
+│   ├── diagnostics.py            # saturação das ativações (tanh/sigmoid) dos modelos salvos
 │   ├── eda.py                    # estatísticas, distribuições e datas das fronteiras
 │   └── utils.py            # seeds e relatório do ambiente
 ├── notebooks/
@@ -96,6 +98,9 @@ projeto-anp/
 │   ├── optuna_delta_trials.csv
 │   ├── optuna_delta_best_params.json
 │   ├── experiments_splits.csv      # sensibilidade ao split
+│   ├── cv_temporal.csv             # CV temporal por fold (TimeSeriesSplit)
+│   ├── walk_forward.csv            # teste com re-treino a cada 58 semanas
+│   ├── diagnostico_saturacao.csv   # saturação das ativações por partição
 │   ├── eda_estatisticas_*.csv      # estatísticas descritivas
 │   ├── fronteiras_splits.csv       # datas de entradas/alvos por partição
 │   ├── tables/                     # capturas das tabelas do DuckDB (DBeaver)
@@ -116,7 +121,8 @@ pip install -r requirements.txt
 ## Execução
 
 Todos os comandos são executados na raiz do projeto, com o ambiente virtual ativo. Todos
-usam `seed=42`; cada configuração é treinada uma vez.
+usam `seed=42`; no hold-out cada configuração é treinada uma vez, e na CV temporal, uma vez
+por fold.
 
 ```bash
 # 1. Baixa dados (se necessário) e constrói a série processada
@@ -136,6 +142,13 @@ python -m src.run_experiments_delta      # -> results/experiments_delta.csv
 
 # 5. Sensibilidade ao split (60/20/20, 70/15/15, 75/15/10, 80/10/10), nos dois alvos
 python -m src.run_experiments_splits    # -> results/experiments_splits.csv
+
+# 6. Validação cruzada temporal (TimeSeriesSplit, 5 folds no período de desenvolvimento)
+#    e walk-forward no teste, re-treinando a cada 58 semanas, nos dois alvos
+python -m src.run_experiments_cv        # -> results/cv_temporal.csv, results/walk_forward.csv
+
+# 7. Diagnóstico de saturação das ativações nos modelos salvos (após os passos 3 e 4)
+python -m src.diagnostics               # -> results/diagnostico_saturacao.csv
 ```
 
 Para usar outro split ou alvo em código próprio:

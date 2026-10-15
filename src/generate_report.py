@@ -51,11 +51,29 @@ REFERENCIAS = [
     "AKIBA, T. <i>et al.</i> Optuna: a next-generation hyperparameter optimization framework. "
     "In: ACM SIGKDD INTERNATIONAL CONFERENCE ON KNOWLEDGE DISCOVERY AND DATA MINING, 25., 2019, "
     "Anchorage. <b>Proceedings</b> [...]. New York: ACM, 2019. p. 2623-2631.",
+    "BENGIO, Y.; SIMARD, P.; FRASCONI, P. Learning long-term dependencies with gradient descent "
+    "is difficult. <b>IEEE Transactions on Neural Networks</b>, v. 5, n. 2, p. 157-166, 1994.",
+    "CANUTO, S. <b>Redes neurais recorrentes e tratamento de sequências</b>. Goiânia: Instituto "
+    "Federal de Goiás, 2026. Material de aula (slides) da disciplina de Deep Learning.",
     "CHO, K. <i>et al.</i> Learning phrase representations using RNN encoder-decoder for "
     "statistical machine translation. In: CONFERENCE ON EMPIRICAL METHODS IN NATURAL LANGUAGE "
     "PROCESSING, 2014, Doha. <b>Proceedings</b> [...]. Stroudsburg: ACL, 2014. p. 1724-1734.",
+    "CHOLLET, F. <b>Deep learning with Python</b>. Shelter Island: Manning, 2018.",
+    "CHUNG, J. <i>et al.</i> Empirical evaluation of gated recurrent neural networks on sequence "
+    "modeling. <b>arXiv</b>, 1412.3555, 2014. Disponível em: https://arxiv.org/abs/1412.3555. "
+    "Acesso em: {acesso}.",
+    "ELMAN, J. L. Finding structure in time. <b>Cognitive Science</b>, v. 14, n. 2, p. 179-211, 1990.",
     "HOCHREITER, S.; SCHMIDHUBER, J. Long short-term memory. <b>Neural Computation</b>, "
     "Cambridge, v. 9, n. 8, p. 1735-1780, 1997.",
+    "HYNDMAN, R. J.; ATHANASOPOULOS, G. <b>Forecasting</b>: principles and practice. 3. ed. "
+    "Melbourne: OTexts, 2021. Disponível em: https://otexts.com/fpp3/. Acesso em: {acesso}.",
+    "MEESE, R. A.; ROGOFF, K. Empirical exchange rate models of the seventies: do they fit out of "
+    "sample? <b>Journal of International Economics</b>, v. 14, n. 1-2, p. 3-24, 1983.",
+    "PASCANU, R.; MIKOLOV, T.; BENGIO, Y. On the difficulty of training recurrent neural networks. "
+    "In: INTERNATIONAL CONFERENCE ON MACHINE LEARNING, 30., 2013, Atlanta. <b>Proceedings</b> [...]. "
+    "[S. l.]: PMLR, 2013. p. 1310-1318.",
+    "PEDREGOSA, F. <i>et al.</i> Scikit-learn: machine learning in Python. <b>Journal of Machine "
+    "Learning Research</b>, v. 12, p. 2825-2830, 2011.",
 ]
 
 MESES = ["jan.", "fev.", "mar.", "abr.", "maio", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."]
@@ -69,6 +87,12 @@ TABLE_CAPTIONS = {
 }
 
 MODEL_NAMES = {"SimpleRNN": "SimpleRNN", "GRU": "GRU", "LSTM": "LSTM"}
+EXPERIMENT_COLUMNS = {
+    "tag": "Grupo", "modelo": "Modelo", "janela": "Jan.", "unidades": "Unid.", "camadas": "Cam.",
+    "dropout": "Dropout", "l2": "L2", "parametros": "Parâm.", "epocas": "Épocas",
+    "mae_val": "MAE val", "rmse_val": "RMSE val", "r2_val": "R² val", "mae_test": "MAE teste",
+    "rmse_test": "RMSE teste", "r2_test": "R² teste", "tempo_treino_s": "Tempo (s)",
+}
 TAG_LABELS = {
     "principal": "comparação principal",
     "unidades": "grade de unidades",
@@ -549,11 +573,8 @@ def _fmt(v, nd=4):
 
 def experiments_table(csv_path: Path):
     df = pd.read_csv(csv_path)
-    cols = ["tag", "modelo", "janela", "unidades", "camadas", "parametros", "epocas",
-            "mae_val", "rmse_val", "r2_val", "mae_test", "rmse_test", "r2_test", "tempo_treino_s"]
-    df = df[[c for c in cols if c in df.columns]]
-    header = ["Grupo", "Modelo", "Jan.", "Unid.", "Cam.", "Parâm.", "Épocas", "MAE val", "RMSE val",
-              "R² val", "MAE teste", "RMSE teste", "R² teste", "Tempo (s)"]
+    df = df[[c for c in EXPERIMENT_COLUMNS if c in df.columns]]
+    header = [EXPERIMENT_COLUMNS[c] for c in df.columns]
     rows = []
     for _, r in df.iterrows():
         row = []
@@ -563,6 +584,10 @@ def experiments_table(csv_path: Path):
                 row.append(f"{int(v):,}".replace(",", ".") if c == "parametros" else str(int(v)))
             elif c == "tempo_treino_s":
                 row.append(_fmt(v, 1))
+            elif c == "dropout":
+                row.append(_fmt(v, 3))
+            elif c == "l2":
+                row.append("–" if pd.isna(v) else f"{v:g}".replace(".", ","))
             elif c == "tag":
                 row.append(TAG_LABELS.get(v, v))
             elif isinstance(v, float):
@@ -570,7 +595,7 @@ def experiments_table(csv_path: Path):
             else:
                 row.append("–" if pd.isna(v) else str(v))
         rows.append(row)
-    return header, rows, ["left", "left"] + ["right"] * 12
+    return header, rows, ["left", "left"] + ["right"] * (len(header) - 2)
 
 
 FIG_RE = re.compile(

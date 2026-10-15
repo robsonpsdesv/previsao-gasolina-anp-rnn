@@ -50,6 +50,7 @@ def _add_row(tag, cell_type, window_size, units, n_layers, dropout, l2, result, 
         "r2_test": test_metrics["r2"],
         "tempo_treino_s": result["train_time_seconds"],
         "tempo_por_epoca_s": result["train_time_per_epoch"],
+        "tempo_epoca_mediano_s": result["tempo_epoca_mediano_s"],
     })
 
 
@@ -85,7 +86,8 @@ def run_and_record(tag, cell_type, window_size, units=64, n_layers=1, dropout=0.
 
 
 def _save_figures(name, art):
-    plot_training_curves(art["history"], name, config.FIGURES_DIR / f"curvas_{name}.png")
+    plot_training_curves(art["history"], name, config.FIGURES_DIR / f"curvas_{name}.png",
+                         scale=float(art["target_scaler"].scale_[0]), unit="R$/L")
     y_test_true = art["target_scaler"].inverse_transform(art["y_test"])
     y_test_pred = art["target_scaler"].inverse_transform(art["y_test_pred"])
     plot_prediction_vs_real(

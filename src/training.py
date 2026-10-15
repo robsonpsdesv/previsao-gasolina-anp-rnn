@@ -81,6 +81,49 @@ def prepare_window_data(window_size: int, horizon: int = config.HORIZON, target_
     return splits, feature_scaler, target_scaler
 
 
+class _EpochTimer(tf.keras.callbacks.Callback):
+    def on_train_begin(self, logs=None):
+        self.times = []
+
+    def on_epoch_begin(self, epoch, logs=None):
+        self._start = time.perf_counter()
+
+    def on_epoch_end(self, epoch, logs=None):
+        self.times.append(time.perf_counter() - self._start)
+
+
+def fit_model(cfg: ModelConfig, X_train, y_train, X_val, y_val, batch_size: int = config.BATCH_SIZE,
+              max_epochs: int = config.MAX_EPOCHS, patience: int = config.EARLY_STOPPING_PATIENCE,
+              verbose: int = 0):
+    """Constrói e treina um modelo com o protocolo comum (Adam, MSE, EarlyStopping, ReduceLROnPlateau).
+
+    Retorna (modelo, histórico, tempo total em s, mediana do tempo por época sem a 1ª época).
+    """
+    model = build_model(input_shape=X_train.shape[1:], cfg=cfg)
+    timer = _EpochTimer()
+    callbacks = [
+        EarlyStopping(monitor="val_loss", patience=patience, restore_best_weights=True),
+        ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=max(3, patience // 3), min_lr=1e-6),
+        timer,
+    ]
+
+    start = time.perf_counter()
+    history = model.fit(
+        X_train,
+        y_train,
+        validation_data=(X_val, y_val),
+        epochs=max_epochs,
+        batch_size=batch_size,
+        shuffle=False,  # lotes em ordem cronológica: escolha de protocolo, não requisito contra vazamento
+        callbacks=callbacks,
+        verbose=verbose,
+    )
+    elapsed = time.perf_counter() - start
+    # a 1ª época inclui a construção do grafo; a mediana das demais estima o custo por época
+    epoch_time = float(np.median(timer.times[1:])) if len(timer.times) > 1 else elapsed
+    return model, history, elapsed, epoch_time
+
+
 def train_experiment(
     cell_type: str,
     window_size: int,
@@ -116,25 +159,10 @@ def train_experiment(
         l2=l2,
         learning_rate=learning_rate,
     )
-    model = build_model(input_shape=(window_size, X_train.shape[-1]), cfg=cfg)
-
-    callbacks = [
-        EarlyStopping(monitor="val_loss", patience=patience, restore_best_weights=True),
-        ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=max(3, patience // 3), min_lr=1e-6),
-    ]
-
-    start = time.perf_counter()
-    history = model.fit(
-        X_train,
-        y_train,
-        validation_data=(X_val, y_val),
-        epochs=max_epochs,
-        batch_size=batch_size,
-        shuffle=False,  # jamais embaralhar sequências temporais
-        callbacks=callbacks,
-        verbose=verbose,
+    model, history, elapsed, epoch_time = fit_model(
+        cfg, X_train, y_train, X_val, y_val, batch_size=batch_size, max_epochs=max_epochs,
+        patience=patience, verbose=verbose,
     )
-    elapsed = time.perf_counter() - start
     n_epochs_run = len(history.history["loss"])
 
     y_val_pred = model.predict(X_val, verbose=0)
@@ -154,6 +182,7 @@ def train_experiment(
         "n_epochs_run": n_epochs_run,
         "train_time_seconds": elapsed,
         "train_time_per_epoch": elapsed / n_epochs_run if n_epochs_run else None,
+        "tempo_epoca_mediano_s": epoch_time,
     }
 
     artifacts = {
